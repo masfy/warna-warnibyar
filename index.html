@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WARNA-WARNI BYAR! (Brain Gym AR) - Ice Breaking Bimtek</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Orbitron & Plus Jakarta Sans -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+    <!-- MediaPipe Hands & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        :root {
+            --neon-cyan: #00f3ff;
+            --neon-pink: #ff007f;
+            --neon-yellow: #ffe600;
+            --neon-green: #00ff66;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #050510;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: #ffffff;
+        }
+
+        .font-cyber {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* Mirror Camera Video & AR Canvas */
+        #webcam-video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            transform: scaleX(-1);
+            z-index: 1;
+            filter: brightness(0.65) contrast(1.15) saturate(1.1);
+            transition: filter 0.3s ease;
+        }
+
+        #ar-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 25;
+            pointer-events: none;
+        }
+
+        /* Cyber Grid Overlay */
+        .cyber-grid {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(to right, rgba(0, 243, 255, 0.07) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 243, 255, 0.07) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        /* Neon Glow Utilities */
+        .neon-border-cyan {
+            border: 2px solid rgba(0, 243, 255, 0.6);
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.25), inset 0 0 15px rgba(0, 243, 255, 0.15);
+        }
+
+        .neon-text-cyan {
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.8), 0 0 25px rgba(0, 243, 255, 0.4);
+        }
+
+        .neon-text-pink {
+            text-shadow: 0 0 10px rgba(255, 0, 127, 0.8), 0 0 25px rgba(255, 0, 127, 0.4);
+        }
+
+        /* Column Divider & Combo Effects */
+        .player-column {
+            position: relative;
+            height: 100%;
+            border-right: 3px solid rgba(0, 243, 255, 0.45);
+            box-shadow: inset -8px 0 20px -8px rgba(0, 243, 255, 0.35);
+            transition: background-color 0.2s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+            overflow: hidden;
+        }
+        .player-column:last-child {
+            border-right: none;
+        }
+
+        /* Combo Fire Border */
+        .combo-fire {
+            border-left: 4px solid #ff7b00 !important;
+            border-right: 4px solid #ff7b00 !important;
+            box-shadow: inset 0 0 45px rgba(255, 100, 0, 0.45), 0 0 30px rgba(255, 190, 0, 0.5) !important;
+            animation: firePulse 0.8s infinite alternate;
+        }
+
+        @keyframes firePulse {
+            0% { box-shadow: inset 0 0 35px rgba(255, 60, 0, 0.35); }
+            100% { box-shadow: inset 0 0 70px rgba(255, 180, 0, 0.65); }
+        }
+
+        /* Screen Shake & Flash Feedbacks */
+        @keyframes shakeHard {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            15% { transform: translate(-14px, -8px) rotate(-1.5deg); }
+            30% { transform: translate(14px, 6px) rotate(1.5deg); }
+            45% { transform: translate(-12px, 10px) rotate(-1deg); }
+            60% { transform: translate(12px, -6px) rotate(1deg); }
+            75% { transform: translate(-8px, 4px) rotate(-0.5deg); }
+        }
+
+        .shake-error {
+            animation: shakeHard 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+            background-color: rgba(255, 0, 55, 0.35) !important;
+        }
+
+        .flash-success {
+            background-color: rgba(0, 255, 110, 0.28) !important;
+        }
+
+        /* Floating Balloons Animation */
+        @keyframes floatBalloon {
+            0%, 100% { transform: translate(-50%, -50%) translateY(0px) scale(1); }
+            50% { transform: translate(-50%, -50%) translateY(-14px) scale(1.03); }
+        }
+
+        .ar-balloon {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            animation: floatBalloon 2.6s ease-in-out infinite;
+            transition: transform 0.15s ease, filter 0.15s ease;
+            cursor: pointer;
+            z-index: 20;
+        }
+
+        .ar-balloon:nth-child(2) {
+            animation-delay: -0.9s;
+        }
+        .ar-balloon:nth-child(3) {
+            animation-delay: -1.7s;
+        }
+
+        /* Pop-up Floating Comedy / Praise Text */
+        @keyframes floatUpFade {
+            0% { opacity: 0; transform: translate(-50%, 10px) scale(0.5); }
+            20% { opacity: 1; transform: translate(-50%, -15px) scale(1.12); }
+            40% { transform: translate(-50%, -25px) scale(1); }
+            85% { opacity: 1; transform: translate(-50%, -55px) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -75px) scale(0.85); }
+        }
+
+        .floating-feedback {
+            position: absolute;
+            left: 50%;
+            top: 48%;
+            transform: translate(-50%, -50%);
+            animation: floatUpFade 1.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            pointer-events: none;
+            z-index: 35;
+            white-space: nowrap;
+        }
+
+        /* Interactive Buttons for IFP Touch */
+        .ifp-btn {
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .ifp-btn:active {
+            transform: scale(0.93);
+        }
+        .ifp-btn.selected {
+            background: linear-gradient(135deg, #00f3ff 0%, #0066ff 100%);
+            color: #030712;
+            border-color: #ffffff;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.75);
+            transform: translateY(-3px) scale(1.03);
+        }
+
+        .duration-btn.selected {
+            background: linear-gradient(135deg, #ff007f 0%, #7928ca 100%);
+            color: #ffffff;
+            border-color: #ffffff;
+            box-shadow: 0 0 25px rgba(255, 0, 127, 0.75);
+            transform: translateY(-2px);
+        }
+
+        /* Stroop Text Outline for high visibility */
+        .stroop-word {
+            -webkit-text-stroke: 3px rgba(255, 255, 255, 0.9);
+            paint-order: stroke fill;
+            filter: drop-shadow(0 8px 18px rgba(0,0,0,0.85));
+        }
+    </style>
+</head>
+<body class="select-none overflow-hidden">
+
+    <!-- Mirrored Webcam Feed -->
+    <video id="webcam-video" autoplay playsinline muted></video>
+
+    <!-- Subtle Cyber Grid -->
+    <div class="cyber-grid"></div>
+
+    <!-- Fullscreen AR Canvas for Hand Pointers, Progress Rings & Confetti -->
+    <canvas id="ar-canvas"></canvas>
+
+    <!-- Top Floating Utility Bar (Audio, Sensitivity, Camera Status & Back to Lobby) -->
+    <header class="fixed top-3 left-4 right-4 z-40 flex items-center justify-between pointer-events-none">
+        <!-- Camera & AI Status Pill -->
+        <div class="flex items-center gap-2.5 bg-slate-950/85 backdrop-blur-md border border-cyan-500/40 px-4 py-2 rounded-2xl pointer-events-auto shadow-lg">
+            <span id="cam-indicator" class="w-3.5 h-3.5 rounded-full bg-amber-400 animate-ping"></span>
+            <span id="cam-status-text" class="text-xs md:text-sm font-bold tracking-wider text-cyan-100 uppercase">Memuat AI Kamera...</span>
+            <span id="hands-count-badge" class="hidden ml-1 px-2.5 py-0.5 rounded-full bg-cyan-500/25 border border-cyan-400 text-cyan-300 text-xs font-extrabold">0 Tangan</span>
+        </div>
+
+        <!-- Global Center Timer (Shown only during gameplay) -->
+        <div id="hud-timer-box" class="hidden items-center gap-4 bg-slate-950/90 backdrop-blur-xl border-2 border-cyan-400 px-7 py-2 rounded-3xl shadow-[0_0_35px_rgba(0,243,255,0.4)] pointer-events-auto">
+            <div class="text-xs font-extrabold uppercase tracking-widest text-cyan-300">SISA<br>WAKTU</div>
+            <div id="hud-timer" class="font-cyber text-4xl md:text-5xl font-black text-white tracking-wider">45</div>
+        </div>
+
+        <!-- Right Action Controls -->
+        <div class="flex items-center gap-2.5 pointer-events-auto">
+            <button id="btn-quit-game" onclick="returnToLobby()" class="hidden items-center gap-2 bg-rose-600/90 hover:bg-rose-500 active:scale-95 text-white font-bold px-4 py-2.5 rounded-2xl border border-rose-300/40 shadow-lg text-sm transition">
+                <span>⏹️</span> <span class="hidden sm:inline">Akhiri Sesi</span>
+            </button>
+
+            <button id="btn-audio-toggle" onclick="toggleAudio()" class="flex items-center gap-2 bg-slate-950/85 hover:bg-slate-900 active:scale-95 text-cyan-300 border border-cyan-500/40 px-4 py-2.5 rounded-2xl shadow-lg text-sm font-bold transition">
+                <span id="audio-icon" class="text-lg">🔊</span>
+                <span id="audio-label" class="hidden md:inline">Suara: ON</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- ==================== 1. LOBBY SCREEN ==================== -->
+    <main id="screen-lobby" class="relative z-30 w-full h-full flex flex-col justify-between pt-16 pb-14 px-4 md:px-10 bg-gradient-to-b from-slate-950/80 via-slate-950/55 to-slate-950/90 backdrop-blur-[3px]">
+        
+        <!-- Top & Center Hero Identity -->
+        <div class="my-auto flex flex-col items-center text-center max-w-5xl mx-auto">
+            <div class="inline-flex items-center gap-2 px-5 py-1.5 rounded-full bg-cyan-500/20 border border-cyan-400/50 text-cyan-300 text-xs md:text-sm font-extrabold tracking-widest uppercase mb-3 shadow-[0_0_20px_rgba(0,243,255,0.3)]">
+                <span>⚡ ICE BREAKING INTERAKTIF BIMTEK & WORKSHOP</span>
+            </div>
+
+            <h1 class="font-cyber text-4xl sm:text-6xl md:text-7xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-pink-400 drop-shadow-[0_5px_25px_rgba(0,243,255,0.45)] leading-tight">
+                WARNA-WARNI BYAR!
+            </h1>
+            <p class="font-cyber text-base sm:text-xl md:text-2xl font-bold text-amber-300 tracking-wide mt-1 drop-shadow">
+                (Brain Gym AR) — "Uji Fokus & Konsentrasi: Awas Tertipu Otak Sendiri!"
+            </p>
+
+            <!-- Hand Detection Live Preview Prompt -->
+            <div class="mt-4 inline-flex items-center gap-3 bg-slate-900/80 border border-white/15 px-5 py-2 rounded-2xl text-xs md:text-sm text-slate-200">
+                <span class="text-xl animate-bounce">🖐️</span>
+                <span>Coba angkat tangan Anda di depan kamera untuk mengetes <strong>Kursor Cahaya AR</strong> sekarang! (Atau gunakan sentuhan jari/mouse)</span>
+            </div>
+        </div>
+
+        <!-- Bottom-Center Interactive Control Deck (Ergonomic for large IFP boards) -->
+        <div class="w-full max-w-6xl mx-auto bg-slate-900/90 backdrop-blur-xl border-2 border-cyan-400/50 rounded-3xl p-4 md:p-5 shadow-[0_0_50px_rgba(0,0,0,0.85)]">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                
+                <!-- Player Count Selector (1 - 4 Players) -->
+                <div class="lg:col-span-5 flex flex-col gap-1.5">
+                    <label class="text-xs md:text-sm font-extrabold uppercase tracking-wider text-cyan-300 flex items-center gap-2">
+                        <span>👥 1. PILIH JUMLAH PESERTA (KOLOM):</span>
+                    </label>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button onclick="selectPlayers(1)" id="pbtn-1" class="ifp-btn flex flex-col items-center justify-center py-2.5 px-2 rounded-2xl bg-slate-800/90 border-2 border-slate-600 text-white font-extrabold">
+                            <span class="text-xl md:text-2xl mb-0.5">👤</span>
+                            <span class="text-xs md:text-sm">1 Pemain</span>
+                        </button>
+                        <button onclick="selectPlayers(2)" id="pbtn-2" class="ifp-btn selected flex flex-col items-center justify-center py-2.5 px-2 rounded-2xl bg-slate-800/90 border-2 border-slate-600 text-white font-extrabold">
+                            <span class="text-xl md:text-2xl mb-0.5">👥</span>
+                            <span class="text-xs md:text-sm">2 Pemain</span>
+                        </button>
+                        <button onclick="selectPlayers(3)" id="pbtn-3" class="ifp-btn flex flex-col items-center justify-center py-2.5 px-2 rounded-2xl bg-slate-800/90 border-2 border-slate-600 text-white font-extrabold">
+                            <span class="text-xl md:text-2xl mb-0.5">👨‍👩‍👦</span>
+                            <span class="text-xs md:text-sm">3 Pemain</span>
+                        </button>
+                        <button onclick="selectPlayers(4)" id="pbtn-4" class="ifp-btn flex flex-col items-center justify-center py-2.5 px-2 rounded-2xl bg-slate-800/90 border-2 border-slate-600 text-white font-extrabold">
+                            <span class="text-xl md:text-2xl mb-0.5">👨‍👩‍👧‍👦</span>
+                            <span class="text-xs md:text-sm">4 Pemain</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Duration Selector (30s, 45s, 60s, 90s, 120s) -->
+                <div class="lg:col-span-4 flex flex-col gap-1.5">
+                    <label class="text-xs md:text-sm font-extrabold uppercase tracking-wider text-pink-300 flex items-center gap-2">
+                        <span>⏱️ 2. PILIH DURASI PERMAINAN:</span>
+                    </label>
+                    <div class="grid grid-cols-5 gap-1.5">
+                        <button onclick="selectDuration(30)" id="dbtn-30" class="duration-btn ifp-btn py-2.5 px-1 rounded-2xl bg-slate-800/90 border-2 border-slate-600 text-white font-extrabold text-center">
+                            <div class="font-cyber text-base md:text-lg">30</div>
+                            <div class="text-[10px] opacity-80">Detik</div>
+                        </button>
+                        <button onclick="selectDuration(45)" id="dbtn-45" class="duration-btn selected ifp-btn py-2.5 px-1 rounded-2xl bg-slate-800/90 border-2 border-slate-600 text-white font-extrabold text-center">
+                            <div class="font-cyber text-base md:text-lg">45</div>
+                            <div class="text-[10px] opacity-80">Detik</div>
+                        </button>
+                        <button onclick="selectDuration(60)" id="dbtn-60" class="duration-btn ifp-btn py-2.5 px-1 rounded-2xl bg-slate-800/90 border-2 border-slate-600 text-white font-extrabold text-center">
+                            <div class="font-cyber text-base md:text-lg">60</div>
+                            <div class="text-[10px] opacity-80">Detik</div>
+                        </button>
+                        <button onclick="selectDuration(90)" id="dbtn-90" class="duration-btn ifp-btn py-2.5 px-1 rounded-2xl bg-slate-800/90 border-2 border-slate-600 text-white font-extrabold text-center">
+                            <div class="font-cyber text-base md:text-lg">90</div>
+                            <div class="text-[10px] opacity-80">Detik</div>
+                        </button>
+                        <button onclick="selectDuration(120)" id="dbtn-120" class="duration-btn ifp-btn py-2.5 px-1 rounded-2xl bg-slate-800/90 border-2 border-slate-600 text-white font-extrabold text-center">
+                            <div class="font-cyber text-base md:text-lg">120</div>
+                            <div class="text-[10px] opacity-80">Detik</div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Action Buttons: Cara Bermain & Mulai -->
+                <div class="lg:col-span-3 flex flex-col gap-2">
+                    <button onclick="toggleHowToModal(true)" class="ifp-btn w-full py-2.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 border-2 border-amber-400/70 text-amber-300 font-extrabold text-xs md:text-sm flex items-center justify-center gap-2 shadow-md">
+                        <span>📖</span> <span>Cara Bermain</span>
+                    </button>
+                    <button onclick="startCountdown()" class="ifp-btn w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 hover:from-emerald-300 hover:to-cyan-300 text-slate-950 font-cyber font-black text-base md:text-lg tracking-wider flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(16,185,129,0.65)] border-2 border-white">
+                        <span>🚀</span> <span>MULAI BYAR!</span>
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Dynamic Player Name Inputs (Aligned Left-to-Right matching standing columns) -->
+            <div class="mt-3.5 pt-3 border-t border-slate-700/80">
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-xs md:text-sm font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-2">
+                        <span>✏️ 3. NAMA PESERTA SESUAI POSISI BERDIRI (KIRI KE KANAN):</span>
+                    </label>
+                    <span class="text-[11px] text-slate-400 hidden sm:inline">Opsional — Ketuk kotak untuk mengganti nama peserta/kelompok</span>
+                </div>
+                <div id="player-names-grid" class="grid grid-cols-2 gap-2.5">
+                    <!-- Populated dynamically via renderPlayerNameInputs() -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ==================== 2. GAMEPLAY SPLIT-SCREEN ARENA ==================== -->
+    <section id="screen-game" class="hidden relative z-20 w-full h-full pt-14 pb-11 flex flex-col">
+        <!-- Dynamic Player Columns Container -->
+        <div id="columns-container" class="w-full h-full flex flex-row overflow-hidden">
+            <!-- Columns injected dynamically via JS (1, 2, 3, or 4 columns) -->
+        </div>
+    </section>
+
+    <!-- ==================== 3. COUNTDOWN OVERLAY (3..2..1..GO!) ==================== -->
+    <div id="overlay-countdown" class="hidden fixed inset-0 z-40 bg-slate-950/75 backdrop-blur-md flex flex-col items-center justify-center pointer-events-none">
+        <p class="text-cyan-300 font-extrabold tracking-widest uppercase text-lg md:text-2xl mb-2 animate-pulse">SIAPKAN TANGAN ANDA DI DEPAN KAMERA!</p>
+        <div id="countdown-number" class="font-cyber text-8xl md:text-[11rem] font-black text-white neon-text-cyan">3</div>
+    </div>
+
+    <!-- ==================== 4. MODAL PANDUAN CARA BERMAIN ==================== -->
+    <div id="modal-howto" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-lg flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-cyan-400 rounded-3xl max-w-3xl w-full p-6 md:p-8 shadow-[0_0_60px_rgba(0,243,255,0.35)]">
+            <div class="flex items-center justify-between border-b border-slate-700 pb-4 mb-5">
+                <h2 class="font-cyber text-2xl md:text-3xl font-black text-cyan-300 flex items-center gap-3">
+                    <span>📖</span> <span>PANDUAN CARA BERMAIN</span>
+                </h2>
+                <button onclick="toggleHowToModal(false)" class="w-11 h-11 rounded-2xl bg-slate-800 hover:bg-rose-600 text-white font-bold text-xl flex items-center justify-center transition">✕</button>
+            </div>
+
+            <div class="space-y-3.5 text-base md:text-lg text-slate-100 leading-relaxed">
+                <div class="flex items-start gap-4 bg-slate-800/75 p-3.5 rounded-2xl border border-slate-700">
+                    <span class="w-9 h-9 rounded-xl bg-cyan-500 text-slate-950 font-cyber font-black flex items-center justify-center shrink-0">1</span>
+                    <p>Berdiri di depan <strong>Papan Interaktif (IFP)</strong> sesuai kolom masing-masing (<strong>1 s.d. 4 orang</strong> berjajar dari kiri ke kanan).</p>
+                </div>
+                <div class="flex items-start gap-4 bg-slate-800/75 p-3.5 rounded-2xl border border-slate-700">
+                    <span class="w-9 h-9 rounded-xl bg-cyan-500 text-slate-950 font-cyber font-black flex items-center justify-center shrink-0">2</span>
+                    <p>Angkat <strong>1 tangan</strong> menghadap kamera hingga <strong>Kursor Cahaya Berkilau</strong> muncul mengikuti ujung jari telunjuk Anda.</p>
+                </div>
+                <div class="flex items-start gap-4 bg-slate-800/75 p-3.5 rounded-2xl border border-amber-500/40">
+                    <span class="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 font-cyber font-black flex items-center justify-center shrink-0">3</span>
+                    <p>Baca instruksi dengan teliti: Apakah diminta memilih <span class="text-amber-300 font-extrabold underline">WARNA TINTANYA</span> (warna visual huruf) atau <span class="text-pink-400 font-extrabold underline">BACAAN TEKSNYA</span> (arti kata yang tertulis)!</p>
+                </div>
+                <div class="flex items-start gap-4 bg-slate-800/75 p-3.5 rounded-2xl border border-slate-700">
+                    <span class="w-9 h-9 rounded-xl bg-cyan-500 text-slate-950 font-cyber font-black flex items-center justify-center shrink-0">4</span>
+                    <p>Arahkan jari telunjuk ke <strong>balon jawaban yang benar</strong> dan tahan sejenak (<strong>0.4 detik</strong>) untuk memecahkannya!</p>
+                </div>
+                <div class="flex items-start gap-4 bg-slate-800/75 p-3.5 rounded-2xl border border-emerald-500/40">
+                    <span class="w-9 h-9 rounded-xl bg-emerald-400 text-slate-950 font-cyber font-black flex items-center justify-center shrink-0">5</span>
+                    <p>Kumpulkan skor tertinggi sebelum waktu habis! Jawab <strong>3x benar berturut-turut</strong> untuk mengaktifkan <strong>🔥 COMBO 2X LIPAT!</strong></p>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <button onclick="toggleHowToModal(false)" class="ifp-btn px-8 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-cyber font-black text-lg shadow-lg">
+                    SIAP, SAYA PAHAM! 👍
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 5. LEADERBOARD / PODIUM AKHIR ==================== -->
+    <div id="modal-gameover" class="hidden fixed inset-0 z-50 bg-slate-950/88 backdrop-blur-xl flex flex-col items-center justify-center p-4 pb-14 overflow-y-auto">
+        <div class="max-w-6xl w-full bg-slate-900/95 border-2 border-amber-400 rounded-3xl p-5 md:p-7 shadow-[0_0_70px_rgba(251,191,36,0.35)] text-center">
+            <div class="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-amber-400/20 border border-amber-400/50 text-amber-300 text-xs font-extrabold uppercase tracking-widest mb-1.5">
+                🏆 WAKTU HABIS! HASIL AKHIR BRAIN GYM AR
+            </div>
+            <h2 class="font-cyber text-2xl md:text-4xl font-black text-white neon-text-cyan mb-1">
+                PODIUM JUARA SESUAI POSISI KOLOM
+            </h2>
+            <p id="winner-announcement-banner" class="text-sm md:text-base font-bold text-amber-300 mb-5">
+                Urutan kolom di bawah ini sesuai dengan posisi berdiri peserta dari kiri ke kanan!
+            </p>
+
+            <!-- Podium Cards Grid (Aligned by Column Position) -->
+            <div id="leaderboard-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <!-- Populated dynamically via JS -->
+            </div>
+
+            <!-- Bottom Action Buttons for IFP -->
+            <div class="flex flex-wrap items-center justify-center gap-4">
+                <button onclick="startCountdown()" class="ifp-btn px-8 py-4 rounded-2xl bg-gradient-to-r from-emerald-400 to-cyan-400 text-slate-950 font-cyber font-black text-lg md:text-xl flex items-center gap-3 shadow-[0_0_30px_rgba(16,185,129,0.6)] border-2 border-white">
+                    <span>🔄</span> <span>MAIN LAGI</span>
+                </button>
+                <button onclick="returnToLobby()" class="ifp-btn px-8 py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-cyber font-bold text-lg md:text-xl flex items-center gap-3 border-2 border-cyan-400/60 shadow-lg">
+                    <span>👥</span> <span>GANTI JUMLAH PEMAIN</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 6. MANDATORY FIXED FOOTER ==================== -->
+    <footer class="fixed bottom-0 left-0 right-0 z-50 h-10 bg-slate-950/90 backdrop-blur-md border-t border-cyan-500/30 flex items-center justify-center px-4 text-xs md:text-sm text-slate-300">
+        <div class="flex items-center gap-2.5">
+            <!-- Modern Tech Inline SVG Logo -->
+            <svg class="w-5 h-5 text-cyan-400 shrink-0 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+            <span class="tracking-wide">
+                &copy; <span id="current-year"></span> | <strong class="text-white font-bold">WARNA-WARNI BYAR!</strong> by Mas Alfy - 
+                <a href="https://www.mfytech.my.id" target="_blank" rel="noopener noreferrer" class="text-cyan-400 font-extrabold hover:text-pink-400 hover:underline transition-all duration-200 hover:drop-shadow-[0_0_10px_rgba(0,243,255,0.9)]">
+                    MfyTech (www.mfytech.my.id)
+                </a>
+            </span>
+        </div>
+    </footer>
+
+    <script>
+        // Set Automatic Current Year in Footer
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+
+        // ==================== STROOP COLORS & GAME CONSTANTS ====================
+        const STROOP_COLORS = [
+            { id: 'MERAH',  label: 'MERAH',  hex: '#FF1744', border: '#FF8A80' },
+            { id: 'BIRU',   label: 'BIRU',   hex: '#00B0FF', border: '#80D8FF' },
+            { id: 'HIJAU',  label: 'HIJAU',  hex: '#00E676', border: '#B9F6CA' },
+            { id: 'KUNING', label: 'KUNING', hex: '#FFEA00', border: '#FFFF8D' },
+            { id: 'UNGU',   label: 'UNGU',   hex: '#D500F9', border: '#EA80FC' }
+        ];
+
+        const PRAISE_TEXTS = [
+            "MANTAP JIWA! +10",
+            "FOKUS TINGKAT DEWA!",
+            "MASIH MUDA NIH!",
+            "LUAR BIASA!",
+            "OTAK ENCER!",
+            "ANTI NGANTUK CLUB!",
+            "CERDAS SEKALI!"
+        ];
+
+        const FAIL_TEXTS = [
+            "WADUH Kegocek!",
+            "KURANG KOPI NIH!",
+            "HAYO FOKUS BAPAK/IBU!",
+            "TERTIPU OTAK SENDIRI!",
+            "JANGAN MELAMUN!",
+            "AWAS SALAH FOKUS!",
+            "BUTUH ICE BREAKING LAGI!"
+        ];
+
+        const PLAYER_COLORS = ['#00f3ff', '#ff007f', '#ffe600', '#00ff66'];
+
+        // ==================== GLOBAL STATE ====================
+        let numPlayers = 2;
+        let gameDuration = 45;
+        let timeRemaining = 45;
+        let customPlayerNames = ['PESERTA 1', 'PESERTA 2', 'PESERTA 3', 'PESERTA 4'];
+        let gameState = 'LOBBY'; // 'LOBBY' | 'COUNTDOWN' | 'PLAYING' | 'GAMEOVER'
+        let timerInterval = null;
+        let players = [];
+        let trackedPointers = []; // Normalized { x, y, id } in mirrored screen space
+        let smoothedPointersByZone = {}; // Smooth interpolation per column/hand
+        let lastHandDetectionTime = 0;
+        let particles = [];
+        let hoverHoldDuration = 450; // 0.45 seconds intentional hold to pop balloon
+
+        // ==================== WEB AUDIO API SYNTHESIZER ====================
+        let audioCtx = null;
+        let soundEnabled = true;
+        let bgmTimer = null;
+        let bgmStep = 0;
+
+        function ensureAudioCtx() {
+            if (!audioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContextClass();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function toggleAudio() {
+            ensureAudioCtx();
+            soundEnabled = !soundEnabled;
+            document.getElementById('audio-icon').textContent = soundEnabled ? '🔊' : '🔇';
+            document.getElementById('audio-label').textContent = soundEnabled ? 'Suara: ON' : 'Suara: OFF';
+            if (!soundEnabled) {
+                stopBGM();
+            } else if (gameState === 'PLAYING') {
+                startBGM();
+            }
+        }
+
+        function playTone(freq, type, duration, vol = 0.2, slideFreq = null) {
+            if (!soundEnabled) return;
+            try {
+                ensureAudioCtx();
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, now);
+                if (slideFreq) {
+                    osc.frequency.exponentialRampToValueAtTime(slideFreq, now + duration);
+                }
+                gain.gain.setValueAtTime(vol, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + duration);
+            } catch (e) {}
+        }
+
+        function sfxBeep(isGo = false) {
+            if (isGo) {
+                playTone(880, 'sawtooth', 0.35, 0.25, 1320);
+            } else {
+                playTone(523.25, 'sine', 0.16, 0.22);
+            }
+        }
+
+        function sfxCorrect(isCombo = false) {
+            // Pop sound + Rising Coin Chime
+            playTone(320, 'sine', 0.08, 0.25, 780);
+            setTimeout(() => playTone(659.25, 'triangle', 0.12, 0.22), 60);
+            setTimeout(() => playTone(isCombo ? 1046.5 : 880, 'triangle', 0.22, 0.25), 130);
+        }
+
+        function sfxWrong() {
+            // Funny Buzzer / Tetot!
+            playTone(160, 'sawtooth', 0.18, 0.26, 130);
+            setTimeout(() => playTone(125, 'sawtooth', 0.28, 0.28, 95), 140);
+        }
+
+        function sfxFanfare() {
+            const notes = [523.25, 659.25, 783.99, 1046.5];
+            notes.forEach((n, idx) => {
+                setTimeout(() => playTone(n, 'triangle', 0.25, 0.25), idx * 130);
+            });
+            setTimeout(() => playTone(1046.5, 'sawtooth', 0.6, 0.25), 550);
+        }
+
+        function startBGM() {
+            stopBGM();
+            if (!soundEnabled) return;
+            bgmStep = 0;
+            const bassNotes = [130.81, 146.83, 164.81, 196.00, 164.81, 146.83, 130.81, 110.00];
+            
+            const loopTick = () => {
+                if (gameState !== 'PLAYING') return;
+                const isUrgent = timeRemaining <= 10;
+                const intervalMs = isUrgent ? 145 : 220;
+                const freq = bassNotes[bgmStep % bassNotes.length] * (isUrgent ? 1.25 : 1);
+                
+                playTone(freq, 'triangle', 0.11, 0.11);
+                if (bgmStep % 2 === 0) {
+                    playTone(freq * 2, 'sine', 0.06, 0.05);
+                }
+                bgmStep++;
+                bgmTimer = setTimeout(loopTick, intervalMs);
+            };
+            loopTick();
+        }
+
+        function stopBGM() {
+            if (bgmTimer) {
+                clearTimeout(bgmTimer);
+                bgmTimer = null;
+            }
+        }
+
+        // ==================== LOBBY & UI FUNCTIONS ====================
+        function getPlayerName(idx) {
+            const raw = customPlayerNames[idx];
+            return (raw && raw.trim().length > 0) ? raw.trim() : `PESERTA ${idx + 1}`;
+        }
+
+        function renderPlayerNameInputs() {
+            const grid = document.getElementById('player-names-grid');
+            if (!grid) return;
+
+            // Keep existing input values before re-rendering
+            for (let i = 0; i < 4; i++) {
+                const existingInput = document.getElementById(`pname-input-${i}`);
+                if (existingInput) {
+                    customPlayerNames[i] = existingInput.value;
+                }
+            }
+
+            grid.className = `grid gap-2.5 ${
+                numPlayers === 1 ? 'grid-cols-1 max-w-md mx-auto' :
+                numPlayers === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+                numPlayers === 3 ? 'grid-cols-1 sm:grid-cols-3' :
+                'grid-cols-2 lg:grid-cols-4'
+            }`;
+
+            grid.innerHTML = '';
+            for (let i = 0; i < numPlayers; i++) {
+                const pColor = PLAYER_COLORS[i];
+                const currentVal = customPlayerNames[i] || `PESERTA ${i + 1}`;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'flex items-center bg-slate-950/90 border-2 rounded-xl px-3 py-1.5 shadow-inner transition focus-within:scale-[1.02]';
+                wrapper.style.borderColor = pColor;
+
+                wrapper.innerHTML = `
+                    <span class="font-cyber font-black text-xs px-2 py-0.5 rounded mr-2 text-slate-950 shrink-0" style="background:${pColor}">
+                        KOLOM ${i + 1}
+                    </span>
+                    <input
+                        id="pname-input-${i}"
+                        type="text"
+                        maxlength="18"
+                        value="${currentVal.replace(/"/g, '&quot;')}"
+                        placeholder="Nama Peserta ${i + 1}..."
+                        oninput="customPlayerNames[${i}] = this.value"
+                        class="w-full bg-transparent text-white font-extrabold text-xs md:text-sm focus:outline-none placeholder-slate-500 select-text"
+                    />
+                `;
+                grid.appendChild(wrapper);
+            }
+        }
+
+        function selectPlayers(count) {
+            ensureAudioCtx();
+            sfxBeep(false);
+            numPlayers = count;
+            for (let i = 1; i <= 4; i++) {
+                const btn = document.getElementById(`pbtn-${i}`);
+                btn.classList.toggle('selected', i === count);
+            }
+            renderPlayerNameInputs();
+        }
+
+        function selectDuration(sec) {
+            ensureAudioCtx();
+            sfxBeep(false);
+            gameDuration = sec;
+            [30, 45, 60, 90, 120].forEach(d => {
+                const btn = document.getElementById(`dbtn-${d}`);
+                if (btn) btn.classList.toggle('selected', d === sec);
+            });
+        }
+
+        function toggleHowToModal(show) {
+            ensureAudioCtx();
+            sfxBeep(false);
+            const modal = document.getElementById('modal-howto');
+            modal.classList.toggle('hidden', !show);
+        }
+
+        function returnToLobby() {
+            stopBGM();
+            if (timerInterval) clearInterval(timerInterval);
+            gameState = 'LOBBY';
+            document.getElementById('modal-gameover').classList.add('hidden');
+            document.getElementById('screen-game').classList.add('hidden');
+            document.getElementById('hud-timer-box').classList.add('hidden');
+            document.getElementById('hud-timer-box').classList.remove('flex');
+            document.getElementById('btn-quit-game').classList.add('hidden');
+            document.getElementById('btn-quit-game').classList.remove('flex');
+            document.getElementById('screen-lobby').classList.remove('hidden');
+        }
+
+        // ==================== GAME INITIALIZATION & STROOP ENGINE ====================
+        function buildPlayerColumns() {
+            // Sync latest names from input fields
+            for (let i = 0; i < numPlayers; i++) {
+                const inputEl = document.getElementById(`pname-input-${i}`);
+                if (inputEl) {
+                    customPlayerNames[i] = inputEl.value;
+                }
+            }
+
+            const container = document.getElementById('columns-container');
+            container.innerHTML = '';
+            players = [];
+
+            const widthPct = (100 / numPlayers).toFixed(4) + '%';
+
+            for (let i = 0; i < numPlayers; i++) {
+                const pColor = PLAYER_COLORS[i];
+                const pName = getPlayerName(i);
+                const colEl = document.createElement('div');
+                colEl.id = `pcol-${i}`;
+                colEl.className = 'player-column flex flex-col justify-between p-2 sm:p-4 select-none';
+                colEl.style.width = widthPct;
+
+                colEl.innerHTML = `
+                    <!-- Player Header & Score -->
+                    <div class="relative z-20 flex flex-col items-center bg-slate-950/85 backdrop-blur-md border-2 rounded-2xl p-2.5 sm:p-3 shadow-lg" style="border-color: ${pColor}">
+                        <div class="w-full flex items-center justify-between gap-1">
+                            <span class="font-cyber font-black text-xs sm:text-sm md:text-base tracking-wider px-2.5 py-0.5 rounded-lg text-slate-950 truncate max-w-[75%]" style="background:${pColor}">
+                                ${pName}
+                            </span>
+                            <span id="pcombo-${i}" class="hidden text-xs sm:text-sm font-extrabold text-amber-300 bg-orange-600/80 px-2.5 py-0.5 rounded-full animate-bounce shrink-0">
+                                🔥 2X!
+                            </span>
+                        </div>
+
+                        <div class="mt-1 flex items-baseline gap-1.5">
+                            <span class="text-[11px] uppercase tracking-widest text-slate-400 font-bold">SKOR:</span>
+                            <span id="pscore-${i}" class="font-cyber text-3xl sm:text-4xl md:text-5xl font-black text-white">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Stroop Question Box -->
+                    <div class="relative z-20 my-auto flex flex-col items-center text-center px-1 pointer-events-none">
+                        <!-- Trap Instruction Pill -->
+                        <div id="pinst-${i}" class="w-full max-w-xs px-3 py-2 rounded-2xl font-extrabold text-xs sm:text-sm md:text-base uppercase tracking-wider shadow-lg border-2 mb-3 transition-all">
+                            PILIH WARNA TINTANYA!
+                        </div>
+
+                        <!-- Main Big Color Word -->
+                        <div class="bg-slate-950/75 backdrop-blur-md px-5 py-3 sm:py-4 rounded-3xl border border-white/15 shadow-2xl">
+                            <div id="pword-${i}" class="font-cyber stroop-word text-3xl sm:text-5xl md:text-6xl font-black tracking-wider">
+                                MERAH
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AR Target Balloons Area (Bottom Half of Column) -->
+                    <div id="pballoons-${i}" class="relative w-full h-[44%] sm:h-[46%]">
+                        <!-- Balloons dynamically rendered here -->
+                    </div>
+                `;
+
+                container.appendChild(colEl);
+
+                players.push({
+                    index: i,
+                    name: pName,
+                    score: 0,
+                    streak: 0,
+                    correctCount: 0,
+                    wrongCount: 0,
+                    question: null,
+                    balloons: [],
+                    cooldownUntil: performance.now() + 600
+                });
+
+                generateStroopQuestion(i);
+            }
+        }
+
+        function generateStroopQuestion(pIdx) {
+            const p = players[pIdx];
+            if (!p) return;
+
+            // 1. Choose Trap Mode: 'INK' (PILIH WARNA TINTANYA!) or 'TEXT' (PILIH BACAAN TEKSNYA!)
+            const mode = Math.random() < 0.5 ? 'INK' : 'TEXT';
+
+            // 2. Pick Word and Ink Color (Guaranteed mismatch to trigger Stroop Effect!)
+            const wordObj = STROOP_COLORS[Math.floor(Math.random() * STROOP_COLORS.length)];
+            const otherColors = STROOP_COLORS.filter(c => c.id !== wordObj.id);
+            const inkObj = otherColors[Math.floor(Math.random() * otherColors.length)];
+
+            const correctObj = mode === 'INK' ? inkObj : wordObj;
+            const trapObj = mode === 'INK' ? wordObj : inkObj; // The brain's automatic trap!
+
+            // Pick a 3rd distractor color
+            const remainingColors = STROOP_COLORS.filter(c => c.id !== correctObj.id && c.id !== trapObj.id);
+            const thirdObj = remainingColors[Math.floor(Math.random() * remainingColors.length)];
+
+            // Shuffle 3 Balloon Options
+            const options = [correctObj, trapObj, thirdObj].sort(() => Math.random() - 0.5);
+
+            // Update Instruction Banner
+            const instEl = document.getElementById(`pinst-${pIdx}`);
+            if (mode === 'INK') {
+                instEl.innerHTML = `🎨 PILIH <span class="underline font-black">WARNA TINTANYA!</span>`;
+                instEl.className = 'w-full max-w-xs px-3 py-2 rounded-2xl font-extrabold text-xs sm:text-sm md:text-base uppercase tracking-wider shadow-lg border-2 mb-2 bg-amber-500/90 text-slate-950 border-white';
+            } else {
+                instEl.innerHTML = `🔤 PILIH <span class="underline font-black">BACAAN TEKSNYA!</span>`;
+                instEl.className = 'w-full max-w-xs px-3 py-2 rounded-2xl font-extrabold text-xs sm:text-sm md:text-base uppercase tracking-wider shadow-lg border-2 mb-2 bg-pink-600/90 text-white border-white';
+            }
+
+            // Update Main Stroop Word
+            const wordEl = document.getElementById(`pword-${pIdx}`);
+            wordEl.textContent = wordObj.label;
+            wordEl.style.color = inkObj.hex;
+
+            // Render 3 Floating AR Balloons inside player's column
+            const balloonArea = document.getElementById(`pballoons-${pIdx}`);
+            balloonArea.innerHTML = '';
+            p.balloons = [];
+
+            // Triangle / Arc layout inside column so balloons never overlap even in 4-player mode
+            const positions = [
+                { xPct: 24, yPct: 36 },
+                { xPct: 76, yPct: 36 },
+                { xPct: 50, yPct: 74 }
+            ];
+
+            // Alternate visual style of balloons (Solid Color + Label Badge for clarity)
+            const balloonSizeClass = numPlayers >= 4
+                ? 'w-20 h-20 sm:w-24 sm:h-24 text-xs sm:text-sm'
+                : numPlayers === 3
+                ? 'w-24 h-24 sm:w-28 sm:h-28 text-sm sm:text-base'
+                : 'w-28 h-28 sm:w-32 sm:h-32 text-base sm:text-lg';
+
+            options.forEach((opt, bIdx) => {
+                const pos = positions[bIdx];
+                const bEl = document.createElement('div');
+                bEl.className = `ar-balloon ${balloonSizeClass} rounded-full flex flex-col items-center justify-center font-cyber font-black text-white shadow-[0_10px_30px_rgba(0,0,0,0.75)] border-4`;
+                bEl.style.left = `${pos.xPct}%`;
+                bEl.style.top = `${pos.yPct}%`;
+                bEl.style.backgroundColor = opt.hex;
+                bEl.style.borderColor = '#ffffff';
+                bEl.style.boxShadow = `0 0 25px ${opt.hex}99, inset 0 6px 12px rgba(255,255,255,0.45)`;
+
+                bEl.innerHTML = `
+                    <span class="px-2 py-0.5 rounded-lg bg-slate-950/75 text-white tracking-wider shadow">
+                        ${opt.label}
+                    </span>
+                `;
+
+                // Allow direct touch/click on IFP screen as well!
+                bEl.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    if (gameState !== 'PLAYING') return;
+                    const now = performance.now();
+                    if (now < bObj.spawnGraceUntil) return;
+                    const rect = bEl.getBoundingClientRect();
+                    triggerBalloonPop(pIdx, bIdx, rect.left + rect.width / 2, rect.top + rect.height / 2);
+                });
+
+                balloonArea.appendChild(bEl);
+
+                const bObj = {
+                    el: bEl,
+                    colorId: opt.id,
+                    hex: opt.hex,
+                    isCorrect: opt.id === correctObj.id,
+                    hoverMs: 0,
+                    spawnGraceUntil: performance.now() + 450 // Grace period so newly spawned balloon doesn't auto-pop
+                };
+
+                p.balloons.push(bObj);
+            });
+
+            p.question = { mode, wordObj, inkObj, correctObj };
+        }
+
+        // ==================== BALLOON POP & FEEDBACK SYSTEM ====================
+        function triggerBalloonPop(pIdx, bIdx, screenX, screenY) {
+            const now = performance.now();
+            const p = players[pIdx];
+            if (!p || now < p.cooldownUntil) return;
+
+            const balloon = p.balloons[bIdx];
+            if (!balloon || now < balloon.spawnGraceUntil) return;
+
+            p.cooldownUntil = now + 550; // Prevent accidental double trigger on new question
+            const colEl = document.getElementById(`pcol-${pIdx}`);
+
+            if (balloon.isCorrect) {
+                // CORRECT ANSWER!
+                p.streak++;
+                p.correctCount++;
+                const isCombo = p.streak >= 3;
+                const pointsAdded = isCombo ? 20 : 10;
+                p.score += pointsAdded;
+
+                sfxCorrect(isCombo);
+                spawnExplosionParticles(screenX, screenY, balloon.hex, 32);
+
+                // Column Neon Green Flash
+                colEl.classList.remove('shake-error');
+                colEl.classList.add('flash-success');
+                setTimeout(() => colEl.classList.remove('flash-success'), 260);
+
+                // Update Combo UI
+                const comboBadge = document.getElementById(`pcombo-${pIdx}`);
+                if (isCombo) {
+                    colEl.classList.add('combo-fire');
+                    comboBadge.classList.remove('hidden');
+                }
+
+                // Random Praise Floating Text
+                const phrase = PRAISE_TEXTS[Math.floor(Math.random() * PRAISE_TEXTS.length)];
+                const bonusTag = isCombo ? ` 🔥 +${pointsAdded}` : ` +${pointsAdded}`;
+                showFloatingFeedback(colEl, `${phrase}${bonusTag}`, true);
+
+            } else {
+                // WRONG ANSWER!
+                p.streak = 0;
+                p.wrongCount++;
+                p.score = Math.max(0, p.score - 5);
+
+                sfxWrong();
+                spawnExplosionParticles(screenX, screenY, '#ff1744', 18);
+
+                // Remove Combo Fire & Shake Column
+                colEl.classList.remove('combo-fire', 'flash-success');
+                document.getElementById(`pcombo-${pIdx}`).classList.add('hidden');
+
+                colEl.classList.remove('shake-error');
+                void colEl.offsetWidth; // Reflow
+                colEl.classList.add('shake-error');
+                setTimeout(() => colEl.classList.remove('shake-error'), 460);
+
+                // Random Hilarious Fail Floating Text
+                const failPhrase = FAIL_TEXTS[Math.floor(Math.random() * FAIL_TEXTS.length)];
+                showFloatingFeedback(colEl, `${failPhrase} (-5)`, false);
+            }
+
+            // Update Score DOM
+            document.getElementById(`pscore-${pIdx}`).textContent = p.score;
+
+            // Generate Next Question Immediately
+            generateStroopQuestion(pIdx);
+        }
+
+        function showFloatingFeedback(colEl, text, isSuccess) {
+            const floatEl = document.createElement('div');
+            floatEl.className = `floating-feedback px-4 py-2 rounded-2xl font-cyber font-black text-sm sm:text-lg md:text-xl shadow-2xl border-2 ${
+                isSuccess
+                    ? 'bg-emerald-400 text-slate-950 border-white shadow-[0_0_25px_rgba(16,185,129,0.9)]'
+                    : 'bg-rose-600 text-white border-amber-300 shadow-[0_0_25px_rgba(244,63,94,0.9)]'
+            }`;
+            floatEl.textContent = text;
+            colEl.appendChild(floatEl);
+            setTimeout(() => floatEl.remove(), 1250);
+        }
+
+        // ==================== COUNTDOWN, TIMER & GAME OVER ====================
+        function startCountdown() {
+            ensureAudioCtx();
+            stopBGM();
+
+            document.getElementById('screen-lobby').classList.add('hidden');
+            document.getElementById('modal-gameover').classList.add('hidden');
+            document.getElementById('screen-game').classList.remove('hidden');
+
+            buildPlayerColumns();
+
+            gameState = 'COUNTDOWN';
+            const overlay = document.getElementById('overlay-countdown');
+            const numEl = document.getElementById('countdown-number');
+            overlay.classList.remove('hidden');
+
+            let count = 3;
+            numEl.textContent = count;
+            sfxBeep(false);
+
+            const cdTimer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    numEl.textContent = count;
+                    sfxBeep(false);
+                } else if (count === 0) {
+                    numEl.textContent = 'BYAR!';
+                    sfxBeep(true);
+                } else {
+                    clearInterval(cdTimer);
+                    overlay.classList.add('hidden');
+                    beginActiveGameplay();
+                }
+            }, 850);
+        }
+
+        function beginActiveGameplay() {
+            gameState = 'PLAYING';
+            timeRemaining = gameDuration;
+
+            const timerBox = document.getElementById('hud-timer-box');
+            const timerEl = document.getElementById('hud-timer');
+            const quitBtn = document.getElementById('btn-quit-game');
+
+            timerBox.classList.remove('hidden');
+            timerBox.classList.add('flex');
+            quitBtn.classList.remove('hidden');
+            quitBtn.classList.add('flex');
+
+            timerEl.textContent = timeRemaining;
+            timerEl.className = 'font-cyber text-4xl md:text-5xl font-black text-white tracking-wider';
+
+            startBGM();
+
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                timerEl.textContent = timeRemaining;
+
+                if (timeRemaining <= 10 && timeRemaining > 0) {
+                    timerEl.className = 'font-cyber text-4xl md:text-5xl font-black text-rose-400 animate-ping tracking-wider';
+                    sfxBeep(false);
+                }
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    finishGameSession();
+                }
+            }, 1000);
+        }
+
+        function getFunnyTitle(score, rank) {
+            if (score >= 140) return "🧠 Suhu Konsentrasi Tingkat Dewa";
+            if (score >= 90)  return "⚡ Pejuang Anti Ngantuk";
+            if (score >= 50)  return "😎 Fokus Mulia Walau Digoda";
+            if (score >= 20)  return "☕ Butuh Kopi Tambahan";
+            return "🤭 Korban Tipuan Otak Sendiri";
+        }
+
+        function finishGameSession() {
+            gameState = 'GAMEOVER';
+            stopBGM();
+            sfxFanfare();
+
+            // Launch Fullscreen Confetti Burst
+            for (let i = 0; i < 6; i++) {
+                setTimeout(() => {
+                    const rx = window.innerWidth * (0.15 + Math.random() * 0.7);
+                    const ry = window.innerHeight * (0.2 + Math.random() * 0.4);
+                    const randomColor = STROOP_COLORS[Math.floor(Math.random() * STROOP_COLORS.length)].hex;
+                    spawnExplosionParticles(rx, ry, randomColor, 40);
+                }, i * 200);
+            }
+
+            // Compute Rank for each player by score (handling ties gracefully)
+            const sortedScores = [...players].sort((a, b) => b.score - a.score);
+            const highestScore = sortedScores[0]?.score ?? 0;
+
+            // Find all winners who share the top score
+            const topWinners = players.filter(p => p.score === highestScore);
+            const winnerNames = topWinners.map(w => w.name).join(' & ');
+            const bannerEl = document.getElementById('winner-announcement-banner');
+            if (bannerEl) {
+                bannerEl.innerHTML = highestScore > 0
+                    ? `🎉 Selamat kepada <span class="text-white underline font-extrabold">${winnerNames}</span> sebagai peraih skor tertinggi (${highestScore} Poin)!`
+                    : `Urutan kartu di bawah ini sesuai dengan posisi berdiri peserta dari kiri ke kanan!`;
+            }
+
+            const grid = document.getElementById('leaderboard-grid');
+            grid.innerHTML = '';
+
+            // Match Grid Columns strictly to the active player columns (Left-to-Right)
+            grid.className = `grid gap-4 mb-6 items-stretch ${
+                numPlayers === 1 ? 'grid-cols-1 max-w-md mx-auto' :
+                numPlayers === 2 ? 'grid-cols-2 max-w-4xl mx-auto' :
+                numPlayers === 3 ? 'grid-cols-3' :
+                'grid-cols-4'
+            }`;
+
+            const medals = ['👑 JUARA 1', '🥈 JUARA 2', '🥉 JUARA 3', '🏅 HARAPAN'];
+
+            // Render in original column order (players[0], players[1], ...) so it aligns with where players stand!
+            players.forEach((p) => {
+                // Determine this player's rank based on score
+                const rankIdx = sortedScores.findIndex(s => s.score === p.score);
+                const isFirstPlace = rankIdx === 0 && highestScore > 0;
+                const pColor = PLAYER_COLORS[p.index];
+                const title = getFunnyTitle(p.score, rankIdx);
+
+                const card = document.createElement('div');
+                card.className = `relative flex flex-col items-center justify-between p-4 sm:p-5 rounded-3xl transition-all ${
+                    isFirstPlace
+                        ? 'bg-gradient-to-b from-amber-500/25 via-slate-900 to-slate-900 border-4 border-amber-400 shadow-[0_0_40px_rgba(251,191,36,0.5)] -translate-y-2'
+                        : 'bg-slate-800/90 border-2 border-slate-600 shadow-xl'
+                }`;
+
+                card.innerHTML = `
+                    <!-- Column Position Indicator -->
+                    <div class="w-full flex items-center justify-between gap-1 mb-2">
+                        <span class="text-[10px] sm:text-xs font-cyber font-bold px-2.5 py-0.5 rounded-md bg-slate-950/80 border border-white/15 text-slate-300">
+                            POSISI KOLOM ${p.index + 1}
+                        </span>
+                        <span class="text-xs sm:text-sm font-cyber font-black px-3 py-0.5 rounded-full ${
+                            isFirstPlace ? 'bg-amber-400 text-slate-950 shadow-[0_0_15px_#fbbf24] animate-bounce' :
+                            rankIdx === 1 ? 'bg-slate-300 text-slate-950' :
+                            rankIdx === 2 ? 'bg-amber-700 text-white' :
+                            'bg-slate-700 text-cyan-300'
+                        }">
+                            ${medals[rankIdx] || medals[3]}
+                        </span>
+                    </div>
+
+                    <!-- Participant Name -->
+                    <div class="font-cyber text-lg sm:text-2xl font-black tracking-wide truncate max-w-full my-1" style="color:${pColor}">
+                        ${p.name}
+                    </div>
+
+                    <!-- Total Score -->
+                    <div class="font-cyber text-4xl sm:text-6xl font-black text-white my-2 drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">
+                        ${p.score}
+                    </div>
+                    <div class="text-[11px] uppercase tracking-widest text-slate-300 font-bold mb-3">
+                        ✅ Benar: ${p.correctCount} &nbsp;|&nbsp; ❌ Salah: ${p.wrongCount}
+                    </div>
+
+                    <!-- Funny Predicate Badge -->
+                    <div class="w-full py-2 px-2.5 rounded-xl bg-slate-950/85 border border-white/10 text-xs sm:text-sm font-bold text-amber-300">
+                        "${title}"
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            document.getElementById('modal-gameover').classList.remove('hidden');
+        }
+
+        // ==================== MEDIAPIPE HANDS AR TRACKING ====================
+        const videoElement = document.getElementById('webcam-video');
+        const arCanvas = document.getElementById('ar-canvas');
+        const ctx = arCanvas.getContext('2d');
+
+        function resizeCanvas() {
+            arCanvas.width = window.innerWidth;
+            arCanvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Helper to validate that a detected hand is a real raised hand (prevents false background detections)
+        function isValidHandPose(landmarks) {
+            if (!landmarks || landmarks.length < 21) return false;
+            const wrist = landmarks[0];
+            const indexMcp = landmarks[5];
+            const indexTip = landmarks[8];
+            const pinkyMcp = landmarks[17];
+
+            // Compute hand bounding box size in normalized camera space
+            let minX = 1, maxX = 0, minY = 1, maxY = 0;
+            for (let i = 0; i < landmarks.length; i++) {
+                const lm = landmarks[i];
+                if (lm.x < minX) minX = lm.x;
+                if (lm.x > maxX) maxX = lm.x;
+                if (lm.y < minY) minY = lm.y;
+                if (lm.y > maxY) maxY = lm.y;
+            }
+            const width = maxX - minX;
+            const height = maxY - minY;
+
+            // Reject tiny noise artifacts or impossibly huge full-screen false positives
+            if (width < 0.035 || height < 0.045 || width > 0.65 || height > 0.75) {
+                return false;
+            }
+
+            // Ensure palm has realistic proportion
+            const palmSize = Math.hypot(indexMcp.x - wrist.x, indexMcp.y - wrist.y);
+            const fingerReach = Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y);
+            if (palmSize < 0.025 || fingerReach < palmSize * 0.7) {
+                return false;
+            }
+
+            // Ensure coordinates are within valid camera frame
+            if (indexTip.x < 0.01 || indexTip.x > 0.99 || indexTip.y < 0.01 || indexTip.y > 0.99) {
+                return false;
+            }
+
+            return true;
+        }
+
+        function onHandResults(results) {
+            lastHandDetectionTime = performance.now();
+            const rawPointers = [];
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const handednesses = results.multiHandedness || [];
+
+                results.multiHandLandmarks.forEach((landmarks, idx) => {
+                    // Check classification confidence score
+                    const score = handednesses[idx]?.score ?? 1.0;
+                    if (score < 0.68) return;
+
+                    // Validate hand geometry to eliminate ghost hands on background objects
+                    if (!isValidHandPose(landmarks)) return;
+
+                    // Blend Index Finger Tip (8) and Index DIP (7) for rock-solid cursor stability
+                    const tip = landmarks[8];
+                    const dip = landmarks[7];
+                    const normX = tip.x * 0.75 + dip.x * 0.25;
+                    const normY = tip.y * 0.75 + dip.y * 0.25;
+
+                    // Mirror X coordinate (1 - x) to match mirrored video feed
+                    const screenX = (1 - normX) * window.innerWidth;
+                    const screenY = normY * window.innerHeight;
+
+                    rawPointers.push({
+                        x: screenX,
+                        y: screenY,
+                        id: idx
+                    });
+                });
+            }
+
+            // Group & smooth pointers per player column so all 1-4 players can play simultaneously
+            const colWidth = window.innerWidth / numPlayers;
+            const nextSmoothed = {};
+            const finalPointers = [];
+
+            rawPointers.forEach((pt, idx) => {
+                const colIdx = Math.min(numPlayers - 1, Math.max(0, Math.floor(pt.x / colWidth)));
+                // Allow up to 2 hands per player column with stable smoothing keys
+                const slotKey = nextSmoothed[`${colIdx}_0`] ? `${colIdx}_1` : `${colIdx}_0`;
+                const prev = smoothedPointersByZone[slotKey];
+
+                let sx = pt.x;
+                let sy = pt.y;
+                if (prev) {
+                    // Smooth interpolation reduces jitter while keeping fast response
+                    sx = prev.x + (pt.x - prev.x) * 0.55;
+                    sy = prev.y + (pt.y - prev.y) * 0.55;
+                }
+
+                const smoothedPt = { x: sx, y: sy, colIdx, slotKey };
+                nextSmoothed[slotKey] = smoothedPt;
+                finalPointers.push(smoothedPt);
+            });
+
+            smoothedPointersByZone = nextSmoothed;
+            trackedPointers = finalPointers;
+
+            // Update live hand counter badge in header
+            const badge = document.getElementById('hands-count-badge');
+            if (badge) {
+                badge.classList.remove('hidden');
+                badge.textContent = `${trackedPointers.length} Tangan Terdeteksi`;
+                badge.className = trackedPointers.length > 0
+                    ? 'ml-1 px-2.5 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-400 text-emerald-300 text-xs font-extrabold'
+                    : 'ml-1 px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-600 text-slate-400 text-xs font-bold';
+            }
+        }
+
+        async function initMediaPipeCamera() {
+            const statusDot = document.getElementById('cam-indicator');
+            const statusText = document.getElementById('cam-status-text');
+
+            try {
+                const hands = new Hands({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                });
+
+                // High confidence & up to 8 hands so 4 players can raise 1 or 2 hands simultaneously
+                hands.setOptions({
+                    maxNumHands: 8,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.72,
+                    minTrackingConfidence: 0.70
+                });
+
+                hands.onResults(onHandResults);
+
+                const camera = new Camera(videoElement, {
+                    onFrame: async () => {
+                        await hands.send({ image: videoElement });
+                    },
+                    width: 1280,
+                    height: 720
+                });
+
+                await camera.start();
+                statusDot.className = 'w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#10b981]';
+                statusText.textContent = 'Kamera AR Aktif';
+            } catch (err) {
+                console.warn('Kamera tidak ditemukan atau izin ditolak, mode sentuh layar tetap aktif:', err);
+                statusDot.className = 'w-3.5 h-3.5 rounded-full bg-rose-500';
+                statusText.textContent = 'Mode Sentuh Layar (Tanpa Kamera)';
+            }
+        }
+
+        // ==================== PARTICLES & AR RENDER LOOP ====================
+        function spawnExplosionParticles(x, y, colorHex, count = 28) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 3 + Math.random() * 9;
+                particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 2,
+                    size: 5 + Math.random() * 7,
+                    color: i % 3 === 0 ? '#ffffff' : colorHex,
+                    alpha: 1,
+                    rotation: Math.random() * Math.PI
+                });
+            }
+        }
+
+        let lastFrameTime = performance.now();
+
+        function renderARLoop(now) {
+            const dt = Math.min(100, now - lastFrameTime);
+            lastFrameTime = now;
+
+            ctx.clearRect(0, 0, arCanvas.width, arCanvas.height);
+
+            // Clear stale hand pointers if camera stops sending frames for > 400ms
+            if (now - lastHandDetectionTime > 400) {
+                trackedPointers = [];
+            }
+
+            // ONLY use real tracked AR hands for hover-to-pop (eliminates ghost mouse cursor auto-selecting!)
+            const activePointers = trackedPointers;
+
+            // 1. Check Balloon Collisions inside each Player's Column Zone simultaneously
+            if (gameState === 'PLAYING' && players.length > 0) {
+                const colWidth = window.innerWidth / numPlayers;
+
+                players.forEach((p, pIdx) => {
+                    const zoneMinX = pIdx * colWidth;
+                    const zoneMaxX = (pIdx + 1) * colWidth;
+
+                    // Filter hand pointers strictly inside this player's column
+                    const colPointers = activePointers.filter(pt => pt.x >= zoneMinX && pt.x < zoneMaxX);
+
+                    // Find the single closest balloon being pointed at in this column
+                    let hoveredBalloonIdx = -1;
+                    let closestDist = Infinity;
+
+                    if (now >= p.cooldownUntil && colPointers.length > 0) {
+                        p.balloons.forEach((b, bIdx) => {
+                            if (now < b.spawnGraceUntil) return; // Ignore newly spawned balloons briefly
+
+                            const rect = b.el.getBoundingClientRect();
+                            if (rect.width === 0) return;
+                            const bx = rect.left + rect.width / 2;
+                            const by = rect.top + rect.height / 2;
+                            const hitRadius = rect.width * 0.50;
+
+                            for (const pt of colPointers) {
+                                const dist = Math.hypot(pt.x - bx, pt.y - by);
+                                if (dist <= hitRadius && dist < closestDist) {
+                                    closestDist = dist;
+                                    hoveredBalloonIdx = bIdx;
+                                }
+                            }
+                        });
+                    }
+
+                    // Update progress rings for each balloon in this player's column
+                    p.balloons.forEach((b, bIdx) => {
+                        const rect = b.el.getBoundingClientRect();
+                        const bx = rect.left + rect.width / 2;
+                        const by = rect.top + rect.height / 2;
+                        const radius = rect.width * 0.50;
+
+                        if (bIdx === hoveredBalloonIdx) {
+                            b.hoverMs += dt;
+                            b.el.style.transform = 'translate(-50%, -50%) scale(1.15)';
+
+                            // Draw Circular Progress Ring around Hovered Balloon
+                            const progress = Math.min(1, b.hoverMs / hoverHoldDuration);
+                            const pColor = PLAYER_COLORS[pIdx] || '#00f3ff';
+
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.arc(bx, by, radius + 8, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * progress));
+                            ctx.strokeStyle = pColor;
+                            ctx.lineWidth = 7;
+                            ctx.lineCap = 'round';
+                            ctx.shadowColor = pColor;
+                            ctx.shadowBlur = 18;
+                            ctx.stroke();
+                            ctx.restore();
+
+                            if (b.hoverMs >= hoverHoldDuration) {
+                                b.hoverMs = 0;
+                                triggerBalloonPop(pIdx, bIdx, bx, by);
+                            }
+                        } else {
+                            // Quickly decay progress if hand moves away
+                            b.hoverMs = Math.max(0, b.hoverMs - dt * 2.5);
+                            b.el.style.transform = '';
+                        }
+                    });
+                });
+            }
+
+            // 2. Draw Sparkling Virtual Hand Pointers for all detected players
+            const colWidth = window.innerWidth / numPlayers;
+            activePointers.forEach((pt) => {
+                const colIdx = Math.min(numPlayers - 1, Math.max(0, Math.floor(pt.x / colWidth)));
+                const pointerColor = PLAYER_COLORS[colIdx] || '#00f3ff';
+                const pLabel = players[colIdx]?.name || getPlayerName(colIdx);
+
+                ctx.save();
+                // Outer glowing halo
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 24, 0, Math.PI * 2);
+                ctx.fillStyle = pointerColor + '44';
+                ctx.shadowColor = pointerColor;
+                ctx.shadowBlur = 25;
+                ctx.fill();
+
+                // Inner ring
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 14, 0, Math.PI * 2);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3.5;
+                ctx.stroke();
+
+                // Bright core dot
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = pointerColor;
+                ctx.fill();
+
+                // Player label tag next to pointer
+                ctx.font = '900 12px Orbitron, sans-serif';
+                ctx.fillStyle = '#ffffff';
+                ctx.shadowColor = '#000000';
+                ctx.shadowBlur = 6;
+                ctx.fillText(pLabel, pt.x + 18, pt.y + 4);
+                ctx.restore();
+            });
+
+            // 3. Update & Draw Confetti / Star Explosion Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const pt = particles[i];
+                pt.x += pt.vx;
+                pt.y += pt.vy;
+                pt.vy += 0.25; // Gravity
+                pt.alpha -= 0.022;
+                pt.rotation += 0.1;
+
+                if (pt.alpha <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, pt.alpha);
+                ctx.translate(pt.x, pt.y);
+                ctx.rotate(pt.rotation);
+                ctx.fillStyle = pt.color;
+                ctx.shadowColor = pt.color;
+                ctx.shadowBlur = 10;
+                ctx.fillRect(-pt.size / 2, -pt.size / 2, pt.size, pt.size);
+                ctx.restore();
+            }
+
+            requestAnimationFrame(renderARLoop);
+        }
+
+        // Start Everything on Window Load
+        window.onload = function () {
+            renderPlayerNameInputs();
+            initMediaPipeCamera();
+            requestAnimationFrame(renderARLoop);
+        };
+    </script>
+</body>
+</html>
