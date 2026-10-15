@@ -236,13 +236,25 @@
         </div>
 
         <!-- Right Action Controls -->
-        <div class="flex items-center gap-2.5 pointer-events-auto">
-            <button id="btn-quit-game" onclick="returnToLobby()" class="hidden items-center gap-2 bg-rose-600/90 hover:bg-rose-500 active:scale-95 text-white font-bold px-4 py-2.5 rounded-2xl border border-rose-300/40 shadow-lg text-sm transition">
-                <span>⏹️</span> <span class="hidden sm:inline">Akhiri Sesi</span>
+        <div class="flex items-center gap-2 pointer-events-auto">
+            <button id="btn-quit-game" onclick="returnToLobby()" class="hidden items-center gap-2 bg-rose-600/90 hover:bg-rose-500 active:scale-95 text-white font-bold px-3.5 py-2 rounded-2xl border border-rose-300/40 shadow-lg text-xs md:text-sm transition">
+                <span>⏹️</span> <span class="hidden sm:inline">Akhiri</span>
             </button>
 
-            <button id="btn-audio-toggle" onclick="toggleAudio()" class="flex items-center gap-2 bg-slate-950/85 hover:bg-slate-900 active:scale-95 text-cyan-300 border border-cyan-500/40 px-4 py-2.5 rounded-2xl shadow-lg text-sm font-bold transition">
-                <span id="audio-icon" class="text-lg">🔊</span>
+            <!-- Sensitivity Preset Toggle for IFP / PID Distance -->
+            <button id="btn-sens-toggle" onclick="cycleSensitivity()" class="flex items-center gap-1.5 bg-slate-950/85 hover:bg-slate-900 active:scale-95 text-amber-300 border border-amber-400/50 px-3.5 py-2 rounded-2xl shadow-lg text-xs md:text-sm font-bold transition" title="Ubah kepekaan deteksi jarak tangan di PID">
+                <span>📡</span>
+                <span id="sens-label">Mode PID: Jarak Jauh</span>
+            </button>
+
+            <!-- Camera Device Switcher (If PID has multiple cameras) -->
+            <button id="btn-cam-switch" onclick="switchCameraDevice()" class="hidden items-center gap-1.5 bg-slate-950/85 hover:bg-slate-900 active:scale-95 text-emerald-300 border border-emerald-400/50 px-3.5 py-2 rounded-2xl shadow-lg text-xs md:text-sm font-bold transition" title="Ganti Kamera PID/Webcam">
+                <span>📷</span>
+                <span class="hidden lg:inline">Ganti Kamera</span>
+            </button>
+
+            <button id="btn-audio-toggle" onclick="toggleAudio()" class="flex items-center gap-1.5 bg-slate-950/85 hover:bg-slate-900 active:scale-95 text-cyan-300 border border-cyan-500/40 px-3.5 py-2 rounded-2xl shadow-lg text-xs md:text-sm font-bold transition">
+                <span id="audio-icon" class="text-base">🔊</span>
                 <span id="audio-label" class="hidden md:inline">Suara: ON</span>
             </button>
         </div>
@@ -267,7 +279,7 @@
             <!-- Hand Detection Live Preview Prompt -->
             <div class="mt-4 inline-flex items-center gap-3 bg-slate-900/80 border border-white/15 px-5 py-2 rounded-2xl text-xs md:text-sm text-slate-200">
                 <span class="text-xl animate-bounce">🖐️</span>
-                <span>Coba angkat tangan Anda di depan kamera untuk mengetes <strong>Kursor Cahaya AR</strong> sekarang! (Atau gunakan sentuhan jari/mouse)</span>
+                <span>Angkat <strong>telapak tangan terbuka</strong> menghadap kamera PID untuk mengetes <strong>Kursor Cahaya AR</strong> (Atau sentuh layar langsung!)</span>
             </div>
         </div>
 
@@ -1053,90 +1065,96 @@
             stopBGM();
             sfxFanfare();
 
-            // Launch Fullscreen Confetti Burst
+            // Fullscreen Confetti Celebration
             for (let i = 0; i < 6; i++) {
                 setTimeout(() => {
-                    const rx = window.innerWidth * (0.15 + Math.random() * 0.7);
-                    const ry = window.innerHeight * (0.2 + Math.random() * 0.4);
-                    const randomColor = STROOP_COLORS[Math.floor(Math.random() * STROOP_COLORS.length)].hex;
+                    const rx = (0.15 + Math.random() * 0.7) * window.innerWidth;
+                    const ry = (0.2 + Math.random() * 0.5) * window.innerHeight;
+                    const randomColor = STROOP_COLORS[i % STROOP_COLORS.length].hex;
                     spawnExplosionParticles(rx, ry, randomColor, 40);
-                }, i * 200);
+                }, i * 180);
             }
 
-            // Compute Rank for each player by score (handling ties gracefully)
-            const sortedScores = [...players].sort((a, b) => b.score - a.score);
-            const highestScore = sortedScores[0]?.score ?? 0;
+            // Compute Rank for each player while keeping their original Left-to-Right Column Order
+            const sortedByScore = [...players].sort((a, b) => b.score - a.score);
+            const rankMap = {};
+            sortedByScore.forEach((p, idx) => {
+                if (idx > 0 && p.score === sortedByScore[idx - 1].score) {
+                    rankMap[p.index] = rankMap[sortedByScore[idx - 1].index];
+                } else {
+                    rankMap[p.index] = idx + 1;
+                }
+            });
 
-            // Find all winners who share the top score
-            const topWinners = players.filter(p => p.score === highestScore);
-            const winnerNames = topWinners.map(w => w.name).join(' & ');
+            // Announcement Banner for Top Winner(s)
+            const topScore = sortedByScore[0]?.score || 0;
+            const topWinners = players.filter(p => p.score === topScore);
             const bannerEl = document.getElementById('winner-announcement-banner');
             if (bannerEl) {
-                bannerEl.innerHTML = highestScore > 0
-                    ? `🎉 Selamat kepada <span class="text-white underline font-extrabold">${winnerNames}</span> sebagai peraih skor tertinggi (${highestScore} Poin)!`
-                    : `Urutan kartu di bawah ini sesuai dengan posisi berdiri peserta dari kiri ke kanan!`;
+                if (numPlayers === 1) {
+                    bannerEl.innerHTML = `🎉 Selamat <strong>${players[0].name}</strong>! Total Skor Akhir: <strong>${topScore} Poin</strong>`;
+                } else if (topWinners.length > 1) {
+                    const names = topWinners.map(w => w.name).join(' & ');
+                    bannerEl.innerHTML = `🔥 SERI! Juara 1 Bersama: <strong>${names}</strong> dengan <strong>${topScore} Poin</strong>!`;
+                } else if (topWinners[0]) {
+                    bannerEl.innerHTML = `👑 Pemenang Utama: <strong>${topWinners[0].name} (Kolom ${topWinners[0].index + 1})</strong> dengan <strong>${topScore} Poin</strong>!`;
+                }
             }
 
+            // Render Leaderboard Cards strictly in Column Order (Kolom 1 -> Kolom N)
             const grid = document.getElementById('leaderboard-grid');
-            grid.innerHTML = '';
-
-            // Match Grid Columns strictly to the active player columns (Left-to-Right)
-            grid.className = `grid gap-4 mb-6 items-stretch ${
+            grid.className = `grid gap-4 mb-6 ${
                 numPlayers === 1 ? 'grid-cols-1 max-w-md mx-auto' :
-                numPlayers === 2 ? 'grid-cols-2 max-w-4xl mx-auto' :
-                numPlayers === 3 ? 'grid-cols-3' :
-                'grid-cols-4'
+                numPlayers === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-3xl mx-auto' :
+                numPlayers === 3 ? 'grid-cols-1 sm:grid-cols-3' :
+                'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
             }`;
+            grid.innerHTML = '';
 
             const medals = ['👑 JUARA 1', '🥈 JUARA 2', '🥉 JUARA 3', '🏅 HARAPAN'];
 
-            // Render in original column order (players[0], players[1], ...) so it aligns with where players stand!
-            players.forEach((p) => {
-                // Determine this player's rank based on score
-                const rankIdx = sortedScores.findIndex(s => s.score === p.score);
-                const isFirstPlace = rankIdx === 0 && highestScore > 0;
-                const pColor = PLAYER_COLORS[p.index];
-                const title = getFunnyTitle(p.score, rankIdx);
+            players.forEach((p, colIdx) => {
+                const rank = rankMap[p.index] || 1;
+                const isChamp = rank === 1;
+                const pColor = PLAYER_COLORS[colIdx];
+                const medalLabel = medals[Math.min(rank - 1, 3)];
 
                 const card = document.createElement('div');
-                card.className = `relative flex flex-col items-center justify-between p-4 sm:p-5 rounded-3xl transition-all ${
-                    isFirstPlace
-                        ? 'bg-gradient-to-b from-amber-500/25 via-slate-900 to-slate-900 border-4 border-amber-400 shadow-[0_0_40px_rgba(251,191,36,0.5)] -translate-y-2'
-                        : 'bg-slate-800/90 border-2 border-slate-600 shadow-xl'
+                card.className = `relative flex flex-col items-center justify-between p-5 rounded-3xl border-2 transition-all ${
+                    isChamp
+                        ? 'bg-gradient-to-b from-amber-500/25 via-slate-900 to-slate-950 border-amber-400 shadow-[0_0_40px_rgba(251,191,36,0.45)] scale-[1.03]'
+                        : 'bg-slate-900/90 border-slate-700 shadow-xl'
                 }`;
 
                 card.innerHTML = `
-                    <!-- Column Position Indicator -->
-                    <div class="w-full flex items-center justify-between gap-1 mb-2">
-                        <span class="text-[10px] sm:text-xs font-cyber font-bold px-2.5 py-0.5 rounded-md bg-slate-950/80 border border-white/15 text-slate-300">
-                            POSISI KOLOM ${p.index + 1}
+                    <div class="w-full flex items-center justify-between gap-2 mb-2">
+                        <span class="font-cyber text-xs font-black px-2.5 py-1 rounded-lg text-slate-950" style="background:${pColor}">
+                            POSISI KOLOM ${colIdx + 1}
                         </span>
-                        <span class="text-xs sm:text-sm font-cyber font-black px-3 py-0.5 rounded-full ${
-                            isFirstPlace ? 'bg-amber-400 text-slate-950 shadow-[0_0_15px_#fbbf24] animate-bounce' :
-                            rankIdx === 1 ? 'bg-slate-300 text-slate-950' :
-                            rankIdx === 2 ? 'bg-amber-700 text-white' :
-                            'bg-slate-700 text-cyan-300'
+                        <span class="font-cyber text-xs font-black px-3 py-1 rounded-full ${
+                            isChamp ? 'bg-amber-400 text-slate-950 shadow-[0_0_15px_rgba(251,191,36,0.8)]' : 'bg-slate-800 text-slate-200 border border-slate-600'
                         }">
-                            ${medals[rankIdx] || medals[3]}
+                            ${medalLabel}
                         </span>
                     </div>
 
-                    <!-- Participant Name -->
-                    <div class="font-cyber text-lg sm:text-2xl font-black tracking-wide truncate max-w-full my-1" style="color:${pColor}">
-                        ${p.name}
+                    <div class="my-2 text-center">
+                        <h3 class="font-cyber text-xl md:text-2xl font-black text-white tracking-wide truncate max-w-[220px]">
+                            ${p.name}
+                        </h3>
+                        <p class="text-xs font-bold text-cyan-300 mt-1">${getFunnyTitle(p.score, rank)}</p>
                     </div>
 
-                    <!-- Total Score -->
-                    <div class="font-cyber text-4xl sm:text-6xl font-black text-white my-2 drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">
-                        ${p.score}
-                    </div>
-                    <div class="text-[11px] uppercase tracking-widest text-slate-300 font-bold mb-3">
-                        ✅ Benar: ${p.correctCount} &nbsp;|&nbsp; ❌ Salah: ${p.wrongCount}
+                    <div class="my-3 bg-slate-950/90 border border-white/10 rounded-2xl py-3 px-6 w-full">
+                        <div class="text-[11px] uppercase tracking-widest text-slate-400 font-bold">TOTAL SKOR</div>
+                        <div class="font-cyber text-4xl md:text-5xl font-black ${isChamp ? 'text-amber-300' : 'text-white'}">
+                            ${p.score}
+                        </div>
                     </div>
 
-                    <!-- Funny Predicate Badge -->
-                    <div class="w-full py-2 px-2.5 rounded-xl bg-slate-950/85 border border-white/10 text-xs sm:text-sm font-bold text-amber-300">
-                        "${title}"
+                    <div class="w-full flex items-center justify-around text-xs font-bold text-slate-300 pt-2 border-t border-slate-800">
+                        <span class="text-emerald-400">✅ Benar: ${p.correctCount}</span>
+                        <span class="text-rose-400">❌ Salah: ${p.wrongCount}</span>
                     </div>
                 `;
                 grid.appendChild(card);
@@ -1145,10 +1163,21 @@
             document.getElementById('modal-gameover').classList.remove('hidden');
         }
 
-        // ==================== MEDIAPIPE HANDS AR TRACKING ====================
+        // ==================== MEDIAPIPE HANDS AR TRACKING (OPTIMIZED FOR IFP / PID) ====================
         const videoElement = document.getElementById('webcam-video');
         const arCanvas = document.getElementById('ar-canvas');
         const ctx = arCanvas.getContext('2d');
+
+        // PID / IFP Sensitivity Modes:
+        // 'PID_FAR' = Ultra-sensitive for wide-angle IFP cameras where players stand 1.5m - 3m away
+        // 'STANDARD' = Balanced mode for closer webcam distance
+        let sensitivityMode = 'PID_FAR';
+        let handsInstance = null;
+        let videoDevices = [];
+        let currentDeviceIndex = 0;
+        let activeStream = null;
+        let isProcessingFrame = false;
+        let trackingLoopId = null;
 
         function resizeCanvas() {
             arCanvas.width = window.innerWidth;
@@ -1157,15 +1186,41 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // Helper to validate that a detected hand is a real raised hand (prevents false background detections)
+        function applyHandsOptions() {
+            if (!handsInstance) return;
+            if (sensitivityMode === 'PID_FAR') {
+                // Optimized for PID / IFP: Detects smaller hands from further away with fast response
+                handsInstance.setOptions({
+                    maxNumHands: 6,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.35,
+                    minTrackingConfidence: 0.35
+                });
+            } else {
+                handsInstance.setOptions({
+                    maxNumHands: 6,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.55,
+                    minTrackingConfidence: 0.50
+                });
+            }
+        }
+
+        function cycleSensitivity() {
+            ensureAudioCtx();
+            sfxBeep(false);
+            sensitivityMode = sensitivityMode === 'PID_FAR' ? 'STANDARD' : 'PID_FAR';
+            const labelEl = document.getElementById('sens-label');
+            if (labelEl) {
+                labelEl.textContent = sensitivityMode === 'PID_FAR' ? 'Mode PID: Jarak Jauh' : 'Mode: Jarak Dekat';
+            }
+            applyHandsOptions();
+        }
+
+        // Helper to validate hand landmarks on PID (Accepts smaller distant hands while filtering edge glitches)
         function isValidHandPose(landmarks) {
             if (!landmarks || landmarks.length < 21) return false;
-            const wrist = landmarks[0];
-            const indexMcp = landmarks[5];
-            const indexTip = landmarks[8];
-            const pinkyMcp = landmarks[17];
 
-            // Compute hand bounding box size in normalized camera space
             let minX = 1, maxX = 0, minY = 1, maxY = 0;
             for (let i = 0; i < landmarks.length; i++) {
                 const lm = landmarks[i];
@@ -1177,20 +1232,9 @@
             const width = maxX - minX;
             const height = maxY - minY;
 
-            // Reject tiny noise artifacts or impossibly huge full-screen false positives
-            if (width < 0.035 || height < 0.045 || width > 0.65 || height > 0.75) {
-                return false;
-            }
-
-            // Ensure palm has realistic proportion
-            const palmSize = Math.hypot(indexMcp.x - wrist.x, indexMcp.y - wrist.y);
-            const fingerReach = Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y);
-            if (palmSize < 0.025 || fingerReach < palmSize * 0.7) {
-                return false;
-            }
-
-            // Ensure coordinates are within valid camera frame
-            if (indexTip.x < 0.01 || indexTip.x > 0.99 || indexTip.y < 0.01 || indexTip.y > 0.99) {
+            // On 4K / Wide-Angle PID cameras, a player's hand 2.5 meters away can be as small as 1.2% of frame width
+            const minSize = sensitivityMode === 'PID_FAR' ? 0.010 : 0.022;
+            if (width < minSize || height < minSize || width > 0.85 || height > 0.88) {
                 return false;
             }
 
@@ -1205,26 +1249,36 @@
                 const handednesses = results.multiHandedness || [];
 
                 results.multiHandLandmarks.forEach((landmarks, idx) => {
-                    // Check classification confidence score
                     const score = handednesses[idx]?.score ?? 1.0;
-                    if (score < 0.68) return;
+                    const minScore = sensitivityMode === 'PID_FAR' ? 0.35 : 0.55;
+                    if (score < minScore) return;
 
-                    // Validate hand geometry to eliminate ghost hands on background objects
                     if (!isValidHandPose(landmarks)) return;
 
-                    // Blend Index Finger Tip (8) and Index DIP (7) for rock-solid cursor stability
-                    const tip = landmarks[8];
-                    const dip = landmarks[7];
-                    const normX = tip.x * 0.75 + dip.x * 0.25;
-                    const normY = tip.y * 0.75 + dip.y * 0.25;
+                    // Hybrid Pointing Coordinate:
+                    // Combines Index Finger Tip (8), Index MCP (5), and Middle MCP (9)
+                    // So whether the player points with 1 finger OR raises an open palm at the PID, cursor stays rock solid!
+                    const indexTip = landmarks[8];
+                    const indexMcp = landmarks[5];
+                    const middleMcp = landmarks[9];
+
+                    const normX = indexTip.x * 0.65 + indexMcp.x * 0.20 + middleMcp.x * 0.15;
+                    const normY = indexTip.y * 0.65 + indexMcp.y * 0.20 + middleMcp.y * 0.15;
 
                     // Mirror X coordinate (1 - x) to match mirrored video feed
                     const screenX = (1 - normX) * window.innerWidth;
                     const screenY = normY * window.innerHeight;
 
+                    // Also store mirrored landmarks so we can draw the glowing AR hand skeleton on screen!
+                    const mirroredLandmarks = landmarks.map(lm => ({
+                        x: (1 - lm.x) * window.innerWidth,
+                        y: lm.y * window.innerHeight
+                    }));
+
                     rawPointers.push({
                         x: screenX,
                         y: screenY,
+                        landmarks: mirroredLandmarks,
                         id: idx
                     });
                 });
@@ -1235,21 +1289,25 @@
             const nextSmoothed = {};
             const finalPointers = [];
 
-            rawPointers.forEach((pt, idx) => {
+            rawPointers.forEach((pt) => {
                 const colIdx = Math.min(numPlayers - 1, Math.max(0, Math.floor(pt.x / colWidth)));
-                // Allow up to 2 hands per player column with stable smoothing keys
                 const slotKey = nextSmoothed[`${colIdx}_0`] ? `${colIdx}_1` : `${colIdx}_0`;
                 const prev = smoothedPointersByZone[slotKey];
 
                 let sx = pt.x;
                 let sy = pt.y;
                 if (prev) {
-                    // Smooth interpolation reduces jitter while keeping fast response
-                    sx = prev.x + (pt.x - prev.x) * 0.55;
-                    sy = prev.y + (pt.y - prev.y) * 0.55;
+                    sx = prev.x + (pt.x - prev.x) * 0.62;
+                    sy = prev.y + (pt.y - prev.y) * 0.62;
                 }
 
-                const smoothedPt = { x: sx, y: sy, colIdx, slotKey };
+                const smoothedPt = {
+                    x: sx,
+                    y: sy,
+                    landmarks: pt.landmarks,
+                    colIdx,
+                    slotKey
+                };
                 nextSmoothed[slotKey] = smoothedPt;
                 finalPointers.push(smoothedPt);
             });
@@ -1263,8 +1321,46 @@
                 badge.classList.remove('hidden');
                 badge.textContent = `${trackedPointers.length} Tangan Terdeteksi`;
                 badge.className = trackedPointers.length > 0
-                    ? 'ml-1 px-2.5 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-400 text-emerald-300 text-xs font-extrabold'
-                    : 'ml-1 px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-600 text-slate-400 text-xs font-bold';
+                    ? 'ml-1 px-2.5 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-400 text-emerald-300 text-xs font-extrabold shadow-[0_0_12px_rgba(16,185,129,0.5)]'
+                    : 'ml-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/60 text-amber-200 text-xs font-bold';
+            }
+        }
+
+        async function startVideoStream(deviceId = null) {
+            const statusDot = document.getElementById('cam-indicator');
+            const statusText = document.getElementById('cam-status-text');
+
+            if (activeStream) {
+                activeStream.getTracks().forEach(track => track.stop());
+            }
+
+            const constraints = {
+                audio: false,
+                video: deviceId
+                    ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                    : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+            };
+
+            activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+            videoElement.srcObject = activeStream;
+            await videoElement.play();
+
+            statusDot.className = 'w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#10b981]';
+            statusText.textContent = 'Kamera AR Aktif';
+        }
+
+        async function switchCameraDevice() {
+            if (videoDevices.length <= 1) return;
+            ensureAudioCtx();
+            sfxBeep(false);
+            currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
+            const nextCam = videoDevices[currentDeviceIndex];
+            const statusText = document.getElementById('cam-status-text');
+            statusText.textContent = `Beralih Kamera (${currentDeviceIndex + 1}/${videoDevices.length})...`;
+            try {
+                await startVideoStream(nextCam.deviceId);
+            } catch (e) {
+                console.warn('Gagal mengganti kamera:', e);
             }
         }
 
@@ -1273,31 +1369,48 @@
             const statusText = document.getElementById('cam-status-text');
 
             try {
-                const hands = new Hands({
+                handsInstance = new Hands({
                     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
                 });
 
-                // High confidence & up to 8 hands so 4 players can raise 1 or 2 hands simultaneously
-                hands.setOptions({
-                    maxNumHands: 8,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.72,
-                    minTrackingConfidence: 0.70
-                });
+                applyHandsOptions();
+                handsInstance.onResults(onHandResults);
 
-                hands.onResults(onHandResults);
+                // Start native webcam / PID camera stream directly (More reliable on IFP Android/Windows browsers than CameraUtils)
+                await startVideoStream();
 
-                const camera = new Camera(videoElement, {
-                    onFrame: async () => {
-                        await hands.send({ image: videoElement });
-                    },
-                    width: 1280,
-                    height: 720
-                });
+                // Check if PID has multiple cameras (e.g. Front Built-in vs Top USB Conference Cam)
+                const allDevices = await navigator.mediaDevices.enumerateDevices();
+                videoDevices = allDevices.filter(d => d.kind === 'videoinput');
+                if (videoDevices.length > 1) {
+                    const switchBtn = document.getElementById('btn-cam-switch');
+                    if (switchBtn) {
+                        switchBtn.classList.remove('hidden');
+                        switchBtn.classList.add('flex');
+                    }
+                }
 
-                await camera.start();
-                statusDot.className = 'w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#10b981]';
-                statusText.textContent = 'Kamera AR Aktif';
+                // Dedicated non-blocking AI frame pump for smooth PID tracking
+                const pumpFrameToAI = async () => {
+                    if (
+                        videoElement.readyState >= 2 &&
+                        !videoElement.paused &&
+                        !isProcessingFrame &&
+                        handsInstance
+                    ) {
+                        isProcessingFrame = true;
+                        try {
+                            await handsInstance.send({ image: videoElement });
+                        } catch (err) {
+                            console.warn('Frame send error:', err);
+                        }
+                        isProcessingFrame = false;
+                    }
+                    trackingLoopId = requestAnimationFrame(pumpFrameToAI);
+                };
+
+                pumpFrameToAI();
+
             } catch (err) {
                 console.warn('Kamera tidak ditemukan atau izin ditolak, mode sentuh layar tetap aktif:', err);
                 statusDot.className = 'w-3.5 h-3.5 rounded-full bg-rose-500';
@@ -1330,9 +1443,8 @@
             lastFrameTime = now;
 
             ctx.clearRect(0, 0, arCanvas.width, arCanvas.height);
-
-            // Clear stale hand pointers if camera stops sending frames for > 400ms
-            if (now - lastHandDetectionTime > 400) {
+            // Clear stale hand pointers if camera stops sending frames for > 650ms
+            if (now - lastHandDetectionTime > 650) {
                 trackedPointers = [];
             }
 
@@ -1362,7 +1474,8 @@
                             if (rect.width === 0) return;
                             const bx = rect.left + rect.width / 2;
                             const by = rect.top + rect.height / 2;
-                            const hitRadius = rect.width * 0.50;
+                            // Generous magnetic hit radius (68% of balloon width) so standing players at PID can lock on easily
+                            const hitRadius = rect.width * 0.68;
 
                             for (const pt of colPointers) {
                                 const dist = Math.hypot(pt.x - bx, pt.y - by);
@@ -1383,20 +1496,20 @@
 
                         if (bIdx === hoveredBalloonIdx) {
                             b.hoverMs += dt;
-                            b.el.style.transform = 'translate(-50%, -50%) scale(1.15)';
+                            b.el.style.transform = 'translate(-50%, -50%) scale(1.14)';
+                            b.el.style.filter = 'brightness(1.25)';
 
-                            // Draw Circular Progress Ring around Hovered Balloon
                             const progress = Math.min(1, b.hoverMs / hoverHoldDuration);
-                            const pColor = PLAYER_COLORS[pIdx] || '#00f3ff';
 
+                            // Draw Neon Circular Hold Progress Ring around Balloon
                             ctx.save();
                             ctx.beginPath();
-                            ctx.arc(bx, by, radius + 8, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * progress));
-                            ctx.strokeStyle = pColor;
-                            ctx.lineWidth = 7;
+                            ctx.arc(bx, by, radius + 10, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+                            ctx.strokeStyle = '#ffffff';
+                            ctx.lineWidth = 8;
                             ctx.lineCap = 'round';
-                            ctx.shadowColor = pColor;
-                            ctx.shadowBlur = 18;
+                            ctx.shadowColor = b.hex;
+                            ctx.shadowBlur = 20;
                             ctx.stroke();
                             ctx.restore();
 
@@ -1405,25 +1518,57 @@
                                 triggerBalloonPop(pIdx, bIdx, bx, by);
                             }
                         } else {
-                            // Quickly decay progress if hand moves away
-                            b.hoverMs = Math.max(0, b.hoverMs - dt * 2.5);
+                            b.hoverMs = Math.max(0, b.hoverMs - dt * 2);
                             b.el.style.transform = '';
+                            b.el.style.filter = '';
                         }
                     });
                 });
             }
 
-            // 2. Draw Sparkling Virtual Hand Pointers for all detected players
+            // 2. Draw Sparkling Virtual Hand Pointers & Skeleton for all detected players
             const colWidth = window.innerWidth / numPlayers;
+            const HAND_CONNECTIONS = [
+                [0,1],[1,2],[2,3],[3,4],       // Thumb
+                [0,5],[5,6],[6,7],[7,8],       // Index
+                [5,9],[9,10],[10,11],[11,12],  // Middle
+                [9,13],[13,14],[14,15],[15,16],// Ring
+                [13,17],[0,17],[17,18],[18,19],[19,20] // Pinky & Palm
+            ];
+
             activePointers.forEach((pt) => {
                 const colIdx = Math.min(numPlayers - 1, Math.max(0, Math.floor(pt.x / colWidth)));
                 const pointerColor = PLAYER_COLORS[colIdx] || '#00f3ff';
                 const pLabel = players[colIdx]?.name || getPlayerName(colIdx);
 
                 ctx.save();
+
+                // Draw Subtle Neon Hand Skeleton so players on PID immediately see their hand is tracked
+                if (pt.landmarks && pt.landmarks.length === 21) {
+                    ctx.strokeStyle = pointerColor + '99';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    for (const [startIdx, endIdx] of HAND_CONNECTIONS) {
+                        const a = pt.landmarks[startIdx];
+                        const b = pt.landmarks[endIdx];
+                        ctx.moveTo(a.x, a.y);
+                        ctx.lineTo(b.x, b.y);
+                    }
+                    ctx.stroke();
+
+                    // Joint dots
+                    ctx.fillStyle = '#ffffff';
+                    for (let i = 0; i < pt.landmarks.length; i += 4) {
+                        const jt = pt.landmarks[i];
+                        ctx.beginPath();
+                        ctx.arc(jt.x, jt.y, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
                 // Outer glowing halo
                 ctx.beginPath();
-                ctx.arc(pt.x, pt.y, 24, 0, Math.PI * 2);
+                ctx.arc(pt.x, pt.y, 28, 0, Math.PI * 2);
                 ctx.fillStyle = pointerColor + '44';
                 ctx.shadowColor = pointerColor;
                 ctx.shadowBlur = 25;
@@ -1431,23 +1576,23 @@
 
                 // Inner ring
                 ctx.beginPath();
-                ctx.arc(pt.x, pt.y, 14, 0, Math.PI * 2);
+                ctx.arc(pt.x, pt.y, 16, 0, Math.PI * 2);
                 ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 3.5;
+                ctx.lineWidth = 4;
                 ctx.stroke();
 
                 // Bright core dot
                 ctx.beginPath();
-                ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+                ctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
                 ctx.fillStyle = pointerColor;
                 ctx.fill();
 
                 // Player label tag next to pointer
-                ctx.font = '900 12px Orbitron, sans-serif';
+                ctx.font = '900 13px Orbitron, sans-serif';
                 ctx.fillStyle = '#ffffff';
                 ctx.shadowColor = '#000000';
                 ctx.shadowBlur = 6;
-                ctx.fillText(pLabel, pt.x + 18, pt.y + 4);
+                ctx.fillText(pLabel, pt.x + 22, pt.y + 5);
                 ctx.restore();
             });
 
